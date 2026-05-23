@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Space Object Model Viewer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <img id="viewer" alt="Generated wall slice" />
+      <div id="overlay">
+        <button id="drawerToggle">DSL</button>
+        <label>cameraX <input id="cameraX" type="range" min="0" max="30" value="0" step="0.1" /></label>
+        <span id="cameraLabel">0.0</span>
+      </div>
+      <section id="drawer" class="open">
+        <h2>DSL Entries</h2>
+        <textarea id="dslInput"></textarea>
+        <button id="renderBtn">Render</button>
+        <pre id="status"></pre>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
