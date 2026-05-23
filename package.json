@@ -1,13 +1,17 @@
 {
   "name": "atlas-space-viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "check": "node --check src/lib/scene.js && node --check src/app/page.js"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }
