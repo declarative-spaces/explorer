@@ -1,4 +1,4 @@
-const OPENAI_URL = 'https://api.openai.com/v1/images';
+const OPENAI_URL = 'https://api.openai.com/v1/images/generations';
 
 export function hasOpenAiKey() {
   return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim());
