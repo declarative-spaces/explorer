@@ -19,7 +19,7 @@ export async function generateImageWithOpenAi(prompt) {
     body: JSON.stringify({
       model: 'gpt-image-1',
       prompt,
-      size: '1024x1792'
+      size: '1024x1536'
     })
   });
 
