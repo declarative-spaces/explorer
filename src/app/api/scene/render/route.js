@@ -7,6 +7,7 @@ import {
   VIEWPORT_HEIGHT,
   VIEWPORT_WIDTH
 } from '@/lib/scene';
+import { generateImageWithOpenAi, hasOpenAiKey } from '@/lib/images';
 
 export async function POST(request) {
   try {
@@ -25,18 +26,24 @@ export async function POST(request) {
     const { accepted, rejected } = resolveCollisions(objects);
     const visible = accepted.map((o) => clipToViewport(o, cameraX)).filter(Boolean);
     const prompt = compilePrompt(visible, cameraX);
-    const svg = renderPlaceholderSvg(cameraX);
-    const svgBase64 = Buffer.from(svg).toString('base64');
+    let image;
+    if (hasOpenAiKey()) {
+      image = await generateImageWithOpenAi(prompt);
+    } else {
+      const svg = renderPlaceholderSvg(cameraX);
+      const svgBase64 = Buffer.from(svg).toString('base64');
+      image = {
+        kind: 'placeholder',
+        url: `data:image/svg+xml;base64,${svgBase64}`
+      };
+    }
 
     return Response.json({
       viewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT, cameraX },
       visible,
       rejected,
       prompt,
-      image: {
-        kind: 'placeholder',
-        url: `data:image/svg+xml;base64,${svgBase64}`
-      }
+      image
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 400 });

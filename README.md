@@ -6,12 +6,33 @@ A mobile-first web app for composing a wall-space scene with a compact DSL and r
 
 - Node.js 18+ (recommended: 20+)
 - npm
+- OpenAI API key (required for real image generation)
 
 ## Install
 
 ```bash
 npm install
 ```
+
+## Configure your OpenAI key
+
+1. Copy `.env.example` to `.env.local`.
+2. Set your key:
+
+```bash
+cp .env.example .env.local
+```
+
+Then edit `.env.local`:
+
+```bash
+OPENAI_API_KEY=your_real_key_here
+```
+
+Notes:
+- `OPENAI_API_KEY` is read **server-side** in `src/lib/images.js`.
+- The key is never exposed in client-side browser code.
+- If no key is configured, the app falls back to a placeholder SVG image.
 
 ## Run in development
 
@@ -50,6 +71,7 @@ Example:
 +7+6/+0+15/+0+05 | A metal door
 ```
 
-## Current rendering backend
+## Current rendering behavior
 
-The app currently returns a placeholder SVG image from the API while preserving the full parse/collision/clip/prompt pipeline. Wire `/api/scene/render` to OpenAI Images API to produce photorealistic output.
+- With `OPENAI_API_KEY`: `/api/scene/render` calls OpenAI Images (`gpt-image-1`) and returns the generated image.
+- Without `OPENAI_API_KEY`: `/api/scene/render` returns a placeholder SVG while preserving parse/collision/clip/prompt pipeline.
