@@ -2,36 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Spatial Object Viewer MVP</title>
-    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main id="app">
-      <canvas id="scene"></canvas>
-
-      <div id="hud">
-        <div id="sliceInfo">Slice x: 0.00 → 9.00</div>
-        <button id="openDrawerBtn" aria-label="Open DSL drawer">DSL</button>
-      </div>
-
-      <section id="drawer" class="closed" aria-label="DSL input drawer">
-        <header>
-          <h1>Spatial Object DSL</h1>
-          <button id="closeDrawerBtn" aria-label="Close drawer">Close</button>
-        </header>
-
-        <p class="hint">Format: <code>"+x+w/+y+h/+z+d" : "color: red;"</code></p>
-        <textarea id="dslInput" spellcheck="false"></textarea>
-        <div id="errors" role="alert"></div>
-
-        <div class="actions">
-          <button id="applyBtn">Apply Scene</button>
-          <button id="resetBtn">Reset View</button>
-        </div>
-      </section>
-    </main>
-
-    <script type="module" src="main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
