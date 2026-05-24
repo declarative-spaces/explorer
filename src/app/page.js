@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import WireframeViewport from './components/WireframeViewport';
 
 const DEFAULT_DSL = `+2+4/+0+6/+1+3 | A small dark wood side table with curved legs and a couple drawers
 +1+5/+7+6/+0+01 | A framed mirror
@@ -12,8 +13,8 @@ export default function HomePage() {
   const [imageUrl, setImageUrl] = useState('');
   const [status, setStatus] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(true);
+  const [mode, setMode] = useState('wireframe');
   const abortRef = useRef(null);
-  const panRef = useRef(null);
 
   const entries = useMemo(() => dslInput
     .split('\n')
@@ -25,11 +26,13 @@ export default function HomePage() {
     }), [dslInput]);
 
   async function renderScene(cameraValue = cameraX) {
+    if (mode !== 'generated') return;
+
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setStatus('Rendering...');
+    setStatus('Rendering generated image...');
     try {
       const response = await fetch('/api/scene/render', {
         method: 'POST',
@@ -54,14 +57,21 @@ export default function HomePage() {
     }, 350);
 
     return () => clearTimeout(timeout);
-  }, [cameraX, dslInput]);
+  }, [cameraX, dslInput, mode]);
 
   return (
     <main style={{ width: '100vw', height: '100vh', background: '#111', color: '#eee', overflow: 'hidden', position: 'relative' }}>
-      {imageUrl && <img src={imageUrl} alt="Generated wall slice" style={{ width: '100vw', height: '100vh', objectFit: 'cover' }} />}
+      {mode === 'wireframe' ? (
+        <WireframeViewport entries={entries} cameraX={cameraX} />
+      ) : (
+        imageUrl && <img src={imageUrl} alt="Generated wall slice" style={{ width: '100vw', height: '100vh', objectFit: 'cover' }} />
+      )}
 
       <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, alignItems: 'center', background: '#0008', padding: 8, borderRadius: 8 }}>
         <button onClick={() => setDrawerOpen((v) => !v)}>DSL</button>
+        <button onClick={() => setMode((m) => (m === 'wireframe' ? 'generated' : 'wireframe'))}>
+          Mode: {mode}
+        </button>
         <label>
           cameraX
           <input
@@ -71,17 +81,10 @@ export default function HomePage() {
             value={cameraX}
             step="0.1"
             onChange={(e) => setCameraX(Number(e.target.value))}
-            onPointerDown={(e) => { panRef.current = e.clientX; }}
-            onPointerMove={(e) => {
-              if (panRef.current == null || e.buttons !== 1) return;
-              const delta = (panRef.current - e.clientX) * 0.02;
-              setCameraX((v) => Math.max(0, Math.min(30, Number((v + delta).toFixed(2)))));
-              panRef.current = e.clientX;
-            }}
-            onPointerUp={() => { panRef.current = null; }}
           />
         </label>
         <span>{cameraX.toFixed(1)}</span>
+        {mode === 'generated' && <button onClick={() => renderScene(cameraX)}>Render</button>}
       </div>
 
       {drawerOpen && (
@@ -92,10 +95,7 @@ export default function HomePage() {
             onChange={(e) => setDslInput(e.target.value)}
             style={{ width: '100%', minHeight: 130, background: '#111', color: '#ddd' }}
           />
-          <div style={{ marginTop: 8 }}>
-            <button onClick={() => renderScene(cameraX)}>Render</button>
-          </div>
-          <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 130, overflow: 'auto' }}>{status}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 130, overflow: 'auto' }}>{status || 'Wireframe mode renders locally with Three.js. Switch to generated mode for OpenAI output.'}</pre>
         </section>
       )}
     </main>

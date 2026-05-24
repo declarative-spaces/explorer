@@ -55,6 +55,14 @@ npm run start
 npm run check
 ```
 
+
+## View modes
+
+- **Wireframe mode (default):** renders a local 3D wireframe preview with Three.js using the same DSL coordinates and camera slice rules.
+- **Generated mode:** calls `/api/scene/render` and generates an image with OpenAI (or placeholder if no key).
+
+Use the **Mode** button in the top toolbar to switch between low-fidelity (wireframe) and high-fidelity (generated) output.
+
 ## DSL input format
 
 Each line in the drawer is:
