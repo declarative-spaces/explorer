@@ -118,8 +118,8 @@ export function App() {
     scene.background = new THREE.Color(0x141414);
 
     const camera = new THREE.OrthographicCamera(0, BASE_VIEW_WIDTH, VIEW_HEIGHT, 0, 0.1, 200);
-    camera.position.set(4.5, 8, 22);
-    camera.lookAt(4.5, 8, 0);
+    camera.position.set(BASE_VIEW_WIDTH / 2, 8, 22);
+    camera.lookAt(BASE_VIEW_WIDTH / 2, 8, 0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.35));
     const keyLight = new THREE.DirectionalLight(0xfff3dd, 1.1);
@@ -155,7 +155,11 @@ export function App() {
     controls.enableRotate = true;
     controls.enablePan = false;
     controls.enableZoom = false;
-    controls.target.set(4.5, 8, 0);
+    controls.target.set(BASE_VIEW_WIDTH / 2, 8, 0);
+    controls.minAzimuthAngle = 0;
+    controls.maxAzimuthAngle = 0;
+    controls.minPolarAngle = Math.PI / 2 - 0.5;
+    controls.maxPolarAngle = Math.PI / 2 + 0.5;
     controls.update();
 
     const animate = () => {
@@ -182,6 +186,15 @@ export function App() {
       threeRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const ctx = threeRef.current;
+    if (!ctx) return;
+    const centerX = viewportX + sliceWidth / 2;
+    ctx.controls.target.x = centerX;
+    ctx.camera.position.x = centerX;
+    ctx.controls.update();
+  }, [viewportX, sliceWidth]);
 
   useEffect(() => {
     const ctx = threeRef.current;
