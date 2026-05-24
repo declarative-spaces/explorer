@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-const VIEW_WIDTH = 9;
+const BASE_VIEW_WIDTH = 9;
 const VIEW_HEIGHT = 16;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
 
 const initialDSL = `"+2+4/+0+6/+1+3" : "color: red;"
 "+1+5/+7+6/+0+01" : "color: blue;"
@@ -17,6 +20,15 @@ type SpatialObject = {
   height: number;
   depth: number;
   styleText: string;
+};
+
+type ThreeCtx = {
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  camera: THREE.OrthographicCamera;
+  controls: OrbitControls;
+  objects: THREE.Group;
+  frameId: number;
 };
 
 function parseCompactNumber(token: string): number {
@@ -46,8 +58,7 @@ function parseStyle(styleText: string): Record<string, string> {
   const out: Record<string, string> = {};
   styleText.split(';').map((x) => x.trim()).filter(Boolean).forEach((part) => {
     const [k, v] = part.split(':').map((s) => s?.trim());
-    if (!k || !v) return;
-    out[k] = v;
+    if (k && v) out[k] = v;
   });
   return out;
 }
@@ -75,86 +86,142 @@ function compose(lines: string[]): { parsed: SpatialObject[]; omittedCount: numb
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const threeRef = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.OrthographicCamera; objects: THREE.Group } | null>(null);
+  const threeRef = useRef<ThreeCtx | null>(null);
 
   const [dslText, setDslText] = useState(initialDSL);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewportX, setViewportX] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const [error, setError] = useState('');
   const [objects, setObjects] = useState<SpatialObject[]>([]);
 
-  const sliceLabel = useMemo(() => `Slice x: ${viewportX.toFixed(2)} → ${(viewportX + VIEW_WIDTH).toFixed(2)}`, [viewportX]);
+  const sliceWidth = BASE_VIEW_WIDTH / zoom;
+  const sliceLabel = useMemo(() => `Slice x: ${viewportX.toFixed(2)} → ${(viewportX + sliceWidth).toFixed(2)} | zoom ${zoom.toFixed(2)}x`, [viewportX, sliceWidth, zoom]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x111111);
+    scene.background = new THREE.Color(0x141414);
 
-    const camera = new THREE.OrthographicCamera(0, VIEW_WIDTH, VIEW_HEIGHT, 0, -100, 100);
-    camera.position.set(0, 0, 30);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.OrthographicCamera(0, BASE_VIEW_WIDTH, VIEW_HEIGHT, 0, 0.1, 200);
+    camera.position.set(4.5, 8, 22);
+    camera.lookAt(4.5, 8, 0);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.5);
-    dir.position.set(5, 10, 20);
-    scene.add(dir);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const keyLight = new THREE.DirectionalLight(0xfff3dd, 1.1);
+    keyLight.position.set(20, 25, 25);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
 
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(300, 40), new THREE.MeshStandardMaterial({ color: 0xf6f6f6, roughness: 0.9 }));
-    wall.position.set(150, 8, -0.02);
+    const rimLight = new THREE.DirectionalLight(0x9ec8ff, 0.45);
+    rimLight.position.set(-12, 10, 20);
+    scene.add(rimLight);
+
+    const wall = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 80),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.03 })
+    );
+    wall.position.set(200, 20, 0);
+    wall.receiveShadow = true;
     scene.add(wall);
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 80), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 1 }));
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 120),
+      new THREE.MeshStandardMaterial({ color: 0x2d2d2d, roughness: 0.95, metalness: 0.05 })
+    );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(150, 0, 15);
+    floor.position.set(200, 0, 30);
+    floor.receiveShadow = true;
     scene.add(floor);
 
     const objectGroup = new THREE.Group();
     scene.add(objectGroup);
 
-    threeRef.current = { renderer, scene, camera, objects: objectGroup };
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.target.set(4.5, 8, 0);
+    controls.minZoom = MIN_ZOOM;
+    controls.maxZoom = MAX_ZOOM;
+    controls.update();
 
-    const tick = () => {
+    const animate = () => {
+      controls.update();
       renderer.render(scene, camera);
-      requestAnimationFrame(tick);
+      const frameId = requestAnimationFrame(animate);
+      if (threeRef.current) threeRef.current.frameId = frameId;
     };
-    tick();
+
+    threeRef.current = { renderer, scene, camera, controls, objects: objectGroup, frameId: 0 };
+    animate();
 
     const onResize = () => renderer.setSize(window.innerWidth, window.innerHeight);
     window.addEventListener('resize', onResize);
+
     return () => {
       window.removeEventListener('resize', onResize);
-      renderer.dispose();
+      const ctx = threeRef.current;
+      if (ctx) {
+        cancelAnimationFrame(ctx.frameId);
+        ctx.controls.dispose();
+        ctx.renderer.dispose();
+      }
+      threeRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     const ctx = threeRef.current;
     if (!ctx) return;
+    const width = BASE_VIEW_WIDTH / zoom;
     ctx.camera.left = viewportX;
-    ctx.camera.right = viewportX + VIEW_WIDTH;
+    ctx.camera.right = viewportX + width;
     ctx.camera.bottom = 0;
     ctx.camera.top = VIEW_HEIGHT;
+    ctx.camera.zoom = zoom;
     ctx.camera.updateProjectionMatrix();
-  }, [viewportX]);
+  }, [viewportX, zoom]);
 
   useEffect(() => {
     const ctx = threeRef.current;
     if (!ctx) return;
-    while (ctx.objects.children.length) ctx.objects.remove(ctx.objects.children[0]);
+    while (ctx.objects.children.length) {
+      const child = ctx.objects.children[0] as THREE.Mesh;
+      if (child.geometry) child.geometry.dispose();
+      const mat = child.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else if (mat) mat.dispose();
+      ctx.objects.remove(child);
+    }
+
     objects.forEach((obj) => {
       const style = parseStyle(obj.styleText);
       const depth = obj.depth === 0 ? 0.03 : obj.depth;
-      const mesh = new THREE.Mesh(
+      const color = style.color ?? '#b9b9b9';
+
+      const solid = new THREE.Mesh(
         new THREE.BoxGeometry(obj.width, obj.height, depth),
-        new THREE.MeshStandardMaterial({ color: style.color ?? '#cccccc', wireframe: true })
+        new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.12 })
       );
-      mesh.position.set(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.z + depth / 2);
-      ctx.objects.add(mesh);
+      solid.castShadow = true;
+      solid.receiveShadow = true;
+      solid.position.set(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.z + depth / 2);
+
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(obj.width, obj.height, depth)),
+        new THREE.LineBasicMaterial({ color: 0x151515 })
+      );
+      edges.position.copy(solid.position);
+
+      ctx.objects.add(solid);
+      ctx.objects.add(edges);
     });
   }, [objects]);
 
@@ -184,24 +251,30 @@ export function App() {
       if (!panning) return;
       const dx = e.clientX - lastX;
       lastX = e.clientX;
-      const unitsPerPixel = VIEW_WIDTH / window.innerWidth;
+      const unitsPerPixel = (BASE_VIEW_WIDTH / zoom) / window.innerWidth;
       setViewportX((prev) => Math.max(0, prev - dx * unitsPerPixel));
     };
     const onUp = () => {
       panning = false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((prev) => THREE.MathUtils.clamp(prev * (e.deltaY > 0 ? 0.92 : 1.08), MIN_ZOOM, MAX_ZOOM));
     };
 
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointermove', onMove);
     canvas.addEventListener('pointerup', onUp);
     canvas.addEventListener('pointercancel', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
+      canvas.removeEventListener('wheel', onWheel);
     };
-  }, []);
+  }, [zoom]);
 
   return (
     <main id="app">
@@ -219,7 +292,7 @@ export function App() {
         <textarea id="dslInput" value={dslText} onChange={(e) => setDslText(e.target.value)} spellCheck={false} />
         <div id="errors" role="alert">{error}</div>
         <div className="actions">
-          <button onClick={() => setViewportX(0)}>Reset View</button>
+          <button onClick={() => { setViewportX(0); setZoom(1); }}>Reset View</button>
         </div>
       </section>
     </main>
