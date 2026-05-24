@@ -6,6 +6,7 @@ const BASE_VIEW_WIDTH = 9;
 const VIEW_HEIGHT = 16;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+const WORLD_WIDTH = 400;
 
 const initialDSL = `"+2+4/+0+6/+1+3" : "color: red;"
 "+1+5/+7+6/+0+01" : "color: blue;"
@@ -84,6 +85,12 @@ function compose(lines: string[]): { parsed: SpatialObject[]; omittedCount: numb
   return { parsed, omittedCount };
 }
 
+function clampViewportX(x: number, zoom: number): number {
+  const sliceWidth = BASE_VIEW_WIDTH / zoom;
+  const maxX = Math.max(0, WORLD_WIDTH - sliceWidth);
+  return THREE.MathUtils.clamp(x, 0, maxX);
+}
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const threeRef = useRef<ThreeCtx | null>(null);
@@ -96,6 +103,7 @@ export function App() {
   const [objects, setObjects] = useState<SpatialObject[]>([]);
 
   const sliceWidth = BASE_VIEW_WIDTH / zoom;
+  const maxViewportX = Math.max(0, WORLD_WIDTH - sliceWidth);
   const sliceLabel = useMemo(() => `Slice x: ${viewportX.toFixed(2)} → ${(viewportX + sliceWidth).toFixed(2)} | zoom ${zoom.toFixed(2)}x`, [viewportX, sliceWidth, zoom]);
 
   useEffect(() => {
@@ -124,19 +132,19 @@ export function App() {
     scene.add(rimLight);
 
     const wall = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 80),
+      new THREE.PlaneGeometry(WORLD_WIDTH, 80),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.03 })
     );
-    wall.position.set(200, 20, 0);
+    wall.position.set(WORLD_WIDTH / 2, 20, 0);
     wall.receiveShadow = true;
     scene.add(wall);
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 120),
+      new THREE.PlaneGeometry(WORLD_WIDTH, 120),
       new THREE.MeshStandardMaterial({ color: 0x2d2d2d, roughness: 0.95, metalness: 0.05 })
     );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(200, 0, 30);
+    floor.position.set(WORLD_WIDTH / 2, 0, 30);
     floor.receiveShadow = true;
     scene.add(floor);
 
@@ -145,11 +153,9 @@ export function App() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableRotate = true;
-    controls.enablePan = true;
-    controls.enableZoom = true;
+    controls.enablePan = false;
+    controls.enableZoom = false;
     controls.target.set(4.5, 8, 0);
-    controls.minZoom = MIN_ZOOM;
-    controls.maxZoom = MAX_ZOOM;
     controls.update();
 
     const animate = () => {
@@ -180,14 +186,17 @@ export function App() {
   useEffect(() => {
     const ctx = threeRef.current;
     if (!ctx) return;
-    const width = BASE_VIEW_WIDTH / zoom;
     ctx.camera.left = viewportX;
-    ctx.camera.right = viewportX + width;
+    ctx.camera.right = viewportX + sliceWidth;
     ctx.camera.bottom = 0;
     ctx.camera.top = VIEW_HEIGHT;
     ctx.camera.zoom = zoom;
     ctx.camera.updateProjectionMatrix();
-  }, [viewportX, zoom]);
+  }, [viewportX, zoom, sliceWidth]);
+
+  useEffect(() => {
+    setViewportX((prev) => clampViewportX(prev, zoom));
+  }, [zoom]);
 
   useEffect(() => {
     const ctx = threeRef.current;
@@ -252,7 +261,7 @@ export function App() {
       const dx = e.clientX - lastX;
       lastX = e.clientX;
       const unitsPerPixel = (BASE_VIEW_WIDTH / zoom) / window.innerWidth;
-      setViewportX((prev) => Math.max(0, prev - dx * unitsPerPixel));
+      setViewportX((prev) => clampViewportX(prev - dx * unitsPerPixel, zoom));
     };
     const onUp = () => {
       panning = false;
@@ -283,11 +292,26 @@ export function App() {
         <div id="sliceInfo">{sliceLabel}</div>
         <button id="openDrawerBtn" aria-label="Open DSL drawer" onClick={() => setDrawerOpen(true)}>DSL</button>
       </div>
+
+      <section id="scrollOverlay" aria-label="Horizontal viewer scroll control">
+        <label htmlFor="scrollSlider">Horizontal scroll</label>
+        <input
+          id="scrollSlider"
+          type="range"
+          min={0}
+          max={Math.max(0, maxViewportX)}
+          step={0.01}
+          value={viewportX}
+          onChange={(e) => setViewportX(clampViewportX(Number(e.target.value), zoom))}
+        />
+      </section>
+
       <section id="drawer" className={drawerOpen ? '' : 'closed'} aria-label="DSL input drawer">
         <header>
           <h1>Spatial Object DSL</h1>
           <button id="closeDrawerBtn" onClick={() => setDrawerOpen(false)}>Close</button>
         </header>
+        <p className="hint">Pan: drag on canvas or use slider. Zoom: mouse wheel/trackpad. Rotate: right-click drag.</p>
         <p className="hint">Format: <code>"+x+w/+y+h/+z+d" : "color: red;"</code></p>
         <textarea id="dslInput" value={dslText} onChange={(e) => setDslText(e.target.value)} spellCheck={false} />
         <div id="errors" role="alert">{error}</div>
