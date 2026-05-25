@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { create } from 'zustand';
 import * as THREE from 'three';
@@ -189,8 +189,17 @@ export default function App() {
   const removeObject = useSceneStore((s) => s.removeObject);
   const objects = useSceneStore((s) => s.objects);
 
-  useMemo(() => {
-    if (objects.length === 0) DEFAULT_INPUTS.forEach((row) => addObject(row.dsl, row.style));
+  const seededDefaultsRef = useRef(false);
+
+  useEffect(() => {
+    if (seededDefaultsRef.current) return;
+    if (objects.length > 0) {
+      seededDefaultsRef.current = true;
+      return;
+    }
+
+    DEFAULT_INPUTS.forEach((row) => addObject(row.dsl, row.style));
+    seededDefaultsRef.current = true;
   }, [addObject, objects.length]);
 
   const onSubmit = (e: FormEvent) => {
