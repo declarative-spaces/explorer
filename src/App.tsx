@@ -146,11 +146,12 @@ function DefaultRoom() {
 }
 
 function DslObjects() {
-  const objects = useSceneStore((s) => s.objects.filter((o) => o.status === 'accepted'));
+  const objects = useSceneStore((s) => s.objects);
+  const acceptedObjects = objects.filter((o) => o.status === 'accepted');
 
   return (
     <>
-      {objects.map((o) => {
+      {acceptedObjects.map((o) => {
         const isCutout = o.z.offset === 0 && o.z.size === 0;
         if (isCutout) return null;
 
@@ -209,7 +210,7 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <Canvas shadows camera={{ position: [5, 4, 10], fov: 40 }}>
+      <Canvas shadows="basic" camera={{ position: [5, 4, 10], fov: 40 }}>
         <color attach="background" args={['#e6e7ea']} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[8, 10, 8]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
