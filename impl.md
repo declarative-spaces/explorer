@@ -191,3 +191,25 @@ Objects intersect when overlap exists on all three axes.
 - Validation overlays and axis guides
 - Performance optimizations (memoized geometry, batching)
 
+
+
+## Material style schema (PBR)
+
+Supported style keys now include:
+- `color: <css-color>;`
+- `roughness: <0..1>;` (defaults to `0.6`, clamped)
+- `metalness: <0..1>;` (defaults to `0.05`, clamped)
+- `map: <texture-url>;`
+- `normalMap: <texture-url>;`
+- `roughnessMap: <texture-url>;`
+- `metalnessMap: <texture-url>;`
+
+Notes:
+- Texture URLs should start with `/` or `http(s)://`.
+- In Vite, place local assets under `public/` and reference them as absolute paths, e.g. `/textures/wood/albedo.jpg`.
+- Scalar roughness/metalness remain active as multipliers even when maps are supplied.
+
+Examples:
+- Matte paint: `color: #8f6f6f; roughness: 0.9; metalness: 0.0;`
+- Brushed metal: `color: #b8c0c8; roughness: 0.2; metalness: 1.0;`
+- Textured wood: `map: /textures/wood/albedo.jpg; normalMap: /textures/wood/normal.jpg; roughnessMap: /textures/wood/roughness.jpg;`
