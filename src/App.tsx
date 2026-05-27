@@ -1,7 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import { Geometry, Base, Subtraction } from '@react-three/csg';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { create } from 'zustand';
 import * as THREE from 'three';
@@ -16,6 +16,7 @@ type DslObject = {
   z: Axis;
   color: string;
   border: boolean;
+  radius: number;
   status: 'accepted' | 'rejected';
   reason?: string;
 };
@@ -51,7 +52,50 @@ const parseDsl = (raw: string) => {
 const parseStyle = (styleRaw: string) => {
   const color = styleRaw.match(/color\s*:\s*([^;]+);?/i)?.[1]?.trim() || '#bcbcbc';
   const border = /border\s*:/i.test(styleRaw);
-  return { color, border };
+  const radiusToken = styleRaw.match(/radius\s*:\s*([0-9]*\.?[0-9]+);?/i)?.[1];
+  const radius = radiusToken ? Math.max(0, parseFloat(radiusToken)) : 0;
+  return { color, border, radius };
+};
+
+
+const buildRoundedRectShape = (width: number, height: number, radius: number) => {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const shape = new THREE.Shape();
+
+  shape.moveTo(-halfW + radius, -halfH);
+  shape.lineTo(halfW - radius, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + radius);
+  shape.lineTo(halfW, halfH - radius);
+  shape.quadraticCurveTo(halfW, halfH, halfW - radius, halfH);
+  shape.lineTo(-halfW + radius, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - radius);
+  shape.lineTo(-halfW, -halfH + radius);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + radius, -halfH);
+
+  return shape;
+};
+
+const buildObjectGeometry = (size: readonly [number, number, number], radiusDsl: number) => {
+  const [width, height, depth] = size;
+  const maxRadius = Math.min(width, height) / 2;
+  const radius = Math.min(radiusDsl * UNIT_SCALE, maxRadius);
+
+  if (radius <= 0) {
+    return new THREE.BoxGeometry(width, height, depth);
+  }
+
+  const shape = buildRoundedRectShape(width, height, radius);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+    curveSegments: 20,
+  });
+
+  geometry.translate(0, 0, -depth / 2);
+  geometry.center();
+
+  return geometry;
 };
 
 const toAabb = (obj: Pick<DslObject, 'x' | 'y' | 'z'>): Aabb => ({
@@ -122,6 +166,7 @@ const useSceneStore = create<Store>((set) => ({
               z: { offset: 0, size: 0 },
               color: '#bcbcbc',
               border: false,
+              radius: 0,
               status: 'rejected',
               reason: (error as Error).message,
             },
@@ -171,6 +216,40 @@ function DefaultRoom() {
   );
 }
 
+function SceneObject({ object }: { object: DslObject }) {
+  const width = object.x.size * UNIT_SCALE;
+  const height = object.y.size * UNIT_SCALE;
+  const depth = object.z.size * UNIT_SCALE;
+  const center = [
+    (object.x.offset + object.x.size / 2) * UNIT_SCALE,
+    (object.y.offset + object.y.size / 2) * UNIT_SCALE,
+    (object.z.offset + object.z.size / 2) * UNIT_SCALE,
+  ] as const;
+
+  const geometry = useMemo(() => buildObjectGeometry([width, height, depth], object.radius), [width, height, depth, object.radius]);
+  const edgesGeometry = useMemo(() => new THREE.EdgesGeometry(geometry), [geometry]);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      edgesGeometry.dispose();
+    };
+  }, [geometry, edgesGeometry]);
+
+  return (
+    <group>
+      <mesh castShadow receiveShadow position={center} geometry={geometry}>
+        <meshStandardMaterial color={object.color} roughness={0.6} metalness={0.05} />
+      </mesh>
+      {object.border && (
+        <lineSegments position={center} geometry={edgesGeometry}>
+          <lineBasicMaterial color="black" />
+        </lineSegments>
+      )}
+    </group>
+  );
+}
+
 function DslObjects() {
   const objects = useSceneStore((s) => s.objects);
   const acceptedObjects = objects.filter((o) => o.status === 'accepted');
@@ -180,27 +259,7 @@ function DslObjects() {
       {acceptedObjects.map((o) => {
         if (isCutoutObject(o)) return null;
 
-        const size = [o.x.size * UNIT_SCALE, o.y.size * UNIT_SCALE, o.z.size * UNIT_SCALE] as const;
-        const center = [
-          (o.x.offset + o.x.size / 2) * UNIT_SCALE,
-          (o.y.offset + o.y.size / 2) * UNIT_SCALE,
-          (o.z.offset + o.z.size / 2) * UNIT_SCALE,
-        ] as const;
-
-        return (
-          <group key={o.id}>
-            <mesh castShadow receiveShadow position={center}>
-              <boxGeometry args={size} />
-              <meshStandardMaterial color={o.color} roughness={0.6} metalness={0.05} />
-            </mesh>
-            {o.border && (
-              <lineSegments position={center}>
-                <edgesGeometry args={[new THREE.BoxGeometry(...size)]} />
-                <lineBasicMaterial color="black" />
-              </lineSegments>
-            )}
-          </group>
-        );
+        return <SceneObject key={o.id} object={o} />;
       })}
     </>
   );
