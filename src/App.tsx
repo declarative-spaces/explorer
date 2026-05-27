@@ -145,7 +145,7 @@ function DefaultRoom() {
         <meshStandardMaterial color="#d7d2cb" roughness={0.85} />
       </mesh>
 
-      <mesh receiveShadow position={[ROOM_WIDTH * UNIT_SCALE / 2, ROOM_HEIGHT * UNIT_SCALE / 2, 0]}>
+      <mesh receiveShadow position={[ROOM_WIDTH * UNIT_SCALE / 2, ROOM_HEIGHT * UNIT_SCALE / 2, -wallThickness / 2]}>
         <Geometry>
           <Base>
             <boxGeometry args={[ROOM_WIDTH * UNIT_SCALE, ROOM_HEIGHT * UNIT_SCALE, wallThickness]} />
