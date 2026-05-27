@@ -16,7 +16,7 @@ type DslObject = {
   z: Axis;
   color: string;
   border: boolean;
-  radius: number;
+  radius: [number, number, number, number];
   status: 'accepted' | 'rejected';
   reason?: string;
 };
@@ -49,39 +49,58 @@ const parseDsl = (raw: string) => {
   };
 };
 
+const parseRadius = (styleRaw: string): [number, number, number, number] => {
+  const radiusRaw = styleRaw.match(/radius\s*:\s*([^;]+);?/i)?.[1];
+  if (!radiusRaw) return [0, 0, 0, 0];
+
+  const tokens = radiusRaw
+    .trim()
+    .split(/\s+/)
+    .map((token) => Number.parseFloat(token))
+    .filter((value) => Number.isFinite(value))
+    .map((value) => Math.max(0, value));
+
+  if (tokens.length === 0) return [0, 0, 0, 0];
+  if (tokens.length === 1) return [tokens[0], tokens[0], tokens[0], tokens[0]];
+  if (tokens.length === 2) return [tokens[0], tokens[1], tokens[0], tokens[1]];
+  if (tokens.length === 3) return [tokens[0], tokens[1], tokens[2], tokens[1]];
+  return [tokens[0], tokens[1], tokens[2], tokens[3]];
+};
+
 const parseStyle = (styleRaw: string) => {
   const color = styleRaw.match(/color\s*:\s*([^;]+);?/i)?.[1]?.trim() || '#bcbcbc';
   const border = /border\s*:/i.test(styleRaw);
-  const radiusToken = styleRaw.match(/radius\s*:\s*([0-9]*\.?[0-9]+);?/i)?.[1];
-  const radius = radiusToken ? Math.max(0, parseFloat(radiusToken)) : 0;
+  const radius = parseRadius(styleRaw);
   return { color, border, radius };
 };
 
 
-const buildRoundedRectShape = (width: number, height: number, radius: number) => {
+const buildRoundedRectShape = (width: number, height: number, radii: [number, number, number, number]) => {
   const halfW = width / 2;
   const halfH = height / 2;
   const shape = new THREE.Shape();
 
-  shape.moveTo(-halfW + radius, -halfH);
-  shape.lineTo(halfW - radius, -halfH);
-  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + radius);
-  shape.lineTo(halfW, halfH - radius);
-  shape.quadraticCurveTo(halfW, halfH, halfW - radius, halfH);
-  shape.lineTo(-halfW + radius, halfH);
-  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - radius);
-  shape.lineTo(-halfW, -halfH + radius);
-  shape.quadraticCurveTo(-halfW, -halfH, -halfW + radius, -halfH);
+  const [topLeft, topRight, bottomRight, bottomLeft] = radii;
+
+  shape.moveTo(-halfW + bottomLeft, -halfH);
+  shape.lineTo(halfW - bottomRight, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + bottomRight);
+  shape.lineTo(halfW, halfH - topRight);
+  shape.quadraticCurveTo(halfW, halfH, halfW - topRight, halfH);
+  shape.lineTo(-halfW + topLeft, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - topLeft);
+  shape.lineTo(-halfW, -halfH + bottomLeft);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + bottomLeft, -halfH);
 
   return shape;
 };
 
-const buildObjectGeometry = (size: readonly [number, number, number], radiusDsl: number) => {
+const buildObjectGeometry = (size: readonly [number, number, number], radiusDsl: [number, number, number, number]) => {
   const [width, height, depth] = size;
   const maxRadius = Math.min(width, height) / 2;
-  const radius = Math.min(radiusDsl * UNIT_SCALE, maxRadius);
+  const radius = radiusDsl.map((value) => Math.min(value * UNIT_SCALE, maxRadius)) as [number, number, number, number];
 
-  if (radius <= 0) {
+  if (radius.every((value) => value <= 0)) {
     return new THREE.BoxGeometry(width, height, depth);
   }
 
@@ -166,7 +185,7 @@ const useSceneStore = create<Store>((set) => ({
               z: { offset: 0, size: 0 },
               color: '#bcbcbc',
               border: false,
-              radius: 0,
+              radius: [0, 0, 0, 0],
               status: 'rejected',
               reason: (error as Error).message,
             },
