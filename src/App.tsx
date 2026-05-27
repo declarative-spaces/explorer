@@ -17,8 +17,15 @@ type DslObject = {
   color: string;
   border: boolean;
   radius: [number, number, number, number];
+  roughness: number;
+  metalness: number;
+  mapUrl?: string;
+  normalMapUrl?: string;
+  roughnessMapUrl?: string;
+  metalnessMapUrl?: string;
   status: 'accepted' | 'rejected';
   reason?: string;
+  warnings?: string[];
 };
 
 type Aabb = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
@@ -29,9 +36,9 @@ const ROOM_HEIGHT = 18;
 const ROOM_DEPTH = 16;
 
 const DEFAULT_INPUTS = [
-  { dsl: '+2+4/+0+6/+1+3', style: 'color: red;' },
-  { dsl: '+1+5/+7+6/+0+01', style: 'color: blue;' },
-  { dsl: '+7+6/+0+15/+0+05', style: 'color: yellow;' },
+  { dsl: '+2+4/+0+6/+1+3', style: 'color: #b44a4a; roughness: 0.9; metalness: 0.0;' },
+  { dsl: '+1+5/+7+6/+0+01', style: 'color: #aeb7c2; roughness: 0.2; metalness: 1.0;' },
+  { dsl: '+7+6/+0+15/+0+05', style: 'color: #d4c88f; map: /textures/wood/albedo.jpg; normalMap: /textures/wood/normal.jpg; roughnessMap: /textures/wood/roughness.jpg;' },
 ];
 
 const decodeDslNumber = (token: string): number => {
@@ -67,11 +74,33 @@ const parseRadius = (styleRaw: string): [number, number, number, number] => {
   return [tokens[0], tokens[1], tokens[2], tokens[3]];
 };
 
+const clamp01 = (value: number, fallback: number): number => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback);
+
 const parseStyle = (styleRaw: string) => {
+  const warnings: string[] = [];
   const color = styleRaw.match(/color\s*:\s*([^;]+);?/i)?.[1]?.trim() || '#bcbcbc';
   const border = /border\s*:/i.test(styleRaw);
   const radius = parseRadius(styleRaw);
-  return { color, border, radius };
+  const roughnessToken = styleRaw.match(/roughness\s*:\s*([^;]+);?/i)?.[1];
+  const metalnessToken = styleRaw.match(/metalness\s*:\s*([^;]+);?/i)?.[1];
+  const roughnessRaw = Number.parseFloat(roughnessToken ?? '');
+  const metalnessRaw = Number.parseFloat(metalnessToken ?? '');
+  if (roughnessToken && !Number.isFinite(roughnessRaw)) warnings.push('Invalid roughness value; using default 0.6.');
+  if (metalnessToken && !Number.isFinite(metalnessRaw)) warnings.push('Invalid metalness value; using default 0.05.');
+  if (Number.isFinite(roughnessRaw) && (roughnessRaw < 0 || roughnessRaw > 1)) warnings.push('roughness clamped to [0,1].');
+  if (Number.isFinite(metalnessRaw) && (metalnessRaw < 0 || metalnessRaw > 1)) warnings.push('metalness clamped to [0,1].');
+  const roughness = clamp01(roughnessRaw, 0.6);
+  const metalness = clamp01(metalnessRaw, 0.05);
+  const mapUrl = styleRaw.match(/map\s*:\s*([^;]+);?/i)?.[1]?.trim();
+  const normalMapUrl = styleRaw.match(/normalMap\s*:\s*([^;]+);?/i)?.[1]?.trim();
+  const roughnessMapUrl = styleRaw.match(/roughnessMap\s*:\s*([^;]+);?/i)?.[1]?.trim();
+  const metalnessMapUrl = styleRaw.match(/metalnessMap\s*:\s*([^;]+);?/i)?.[1]?.trim();
+  const mapFields = [mapUrl, normalMapUrl, roughnessMapUrl, metalnessMapUrl];
+  if (mapFields.some((url) => typeof url === 'string' && url.length > 0 && !/^(\/|https?:\/\/)/i.test(url))) {
+    warnings.push('Texture URLs should start with / or http(s)://');
+  }
+
+  return { color, border, radius, roughness, metalness, mapUrl, normalMapUrl, roughnessMapUrl, metalnessMapUrl, warnings };
 };
 
 
@@ -136,6 +165,22 @@ const intersects = (a: Aabb, b: Aabb): boolean =>
 
 const isCutoutObject = (obj: Pick<DslObject, 'z'>): boolean => obj.z.offset === 0 && obj.z.size === 0;
 
+const textureCache = new Map<string, THREE.Texture>();
+
+
+const getTextureFromCache = (url?: string, color = false) => {
+  if (!url) return null;
+  if (textureCache.has(url)) return textureCache.get(url) ?? null;
+
+  const texture = new THREE.TextureLoader().load(url);
+  if (color) texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.needsUpdate = true;
+  textureCache.set(url, texture);
+  return texture;
+};
+
 type Store = {
   objects: DslObject[];
   addObject: (dsl: string, style: string) => void;
@@ -186,8 +231,15 @@ const useSceneStore = create<Store>((set) => ({
               color: '#bcbcbc',
               border: false,
               radius: [0, 0, 0, 0],
+              roughness: 0.6,
+              metalness: 0.05,
+              mapUrl: undefined,
+              normalMapUrl: undefined,
+              roughnessMapUrl: undefined,
+              metalnessMapUrl: undefined,
               status: 'rejected',
               reason: (error as Error).message,
+              warnings: [],
             },
           ],
         };
@@ -247,6 +299,10 @@ function SceneObject({ object }: { object: DslObject }) {
 
   const geometry = useMemo(() => buildObjectGeometry([width, height, depth], object.radius), [width, height, depth, object.radius]);
   const edgesGeometry = useMemo(() => new THREE.EdgesGeometry(geometry), [geometry]);
+  const mapTexture = useMemo(() => getTextureFromCache(object.mapUrl, true), [object.mapUrl]);
+  const normalMapTexture = useMemo(() => getTextureFromCache(object.normalMapUrl), [object.normalMapUrl]);
+  const roughnessMapTexture = useMemo(() => getTextureFromCache(object.roughnessMapUrl), [object.roughnessMapUrl]);
+  const metalnessMapTexture = useMemo(() => getTextureFromCache(object.metalnessMapUrl), [object.metalnessMapUrl]);
 
   useEffect(() => {
     return () => {
@@ -258,7 +314,7 @@ function SceneObject({ object }: { object: DslObject }) {
   return (
     <group>
       <mesh castShadow receiveShadow position={center} geometry={geometry}>
-        <meshStandardMaterial color={object.color} roughness={0.6} metalness={0.05} />
+        <meshStandardMaterial color={object.color} roughness={object.roughness} metalness={object.metalness} map={mapTexture} normalMap={normalMapTexture} roughnessMap={roughnessMapTexture} metalnessMap={metalnessMapTexture} />
       </mesh>
       {object.border && (
         <lineSegments position={center} geometry={edgesGeometry}>
@@ -342,6 +398,7 @@ export default function App() {
                   <code>{o.raw}</code>
                   <small>{o.styleRaw}</small>
                   <p>{o.status === 'accepted' ? 'Accepted' : `Rejected: ${o.reason}`}</p>
+                  {o.warnings && o.warnings.length > 0 && <p>Warnings: {o.warnings.join(' ')}</p>}
                   <button onClick={() => removeObject(o.id)}>Remove</button>
                 </div>
               ))}
