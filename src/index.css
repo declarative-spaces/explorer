@@ -1,0 +1,60 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+html,
+body,
+#root,
+.app-root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(360px, 90vw);
+  background: rgba(21, 23, 27, 0.92);
+  color: #fff;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  padding: 1rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.drawer.open { transform: translateX(0); }
+
+.toggle {
+  align-self: flex-start;
+  background: #3949ab;
+  border: 0;
+  color: #fff;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+}
+
+form { display: grid; gap: 0.4rem; }
+input, button {
+  padding: 0.45rem;
+  border-radius: 4px;
+  border: 1px solid #666;
+}
+
+.list { overflow: auto; display: grid; gap: 0.5rem; }
+.item { border: 1px solid #555; padding: 0.5rem; background: rgba(255,255,255,0.04); }
+.item.rejected { border-color: #f06292; }
+.item.accepted { border-color: #81c784; }
+code { display: block; color: #90caf9; }
+small { display: block; color: #e0e0e0; }
