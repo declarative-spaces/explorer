@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import { Geometry, Base, Subtraction } from '@react-three/csg';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { create } from 'zustand';
@@ -70,6 +71,8 @@ const intersects = (a: Aabb, b: Aabb): boolean =>
   a.minZ < b.maxZ &&
   a.maxZ > b.minZ;
 
+const isCutoutObject = (obj: Pick<DslObject, 'z'>): boolean => obj.z.offset === 0 && obj.z.size === 0;
+
 type Store = {
   objects: DslObject[];
   addObject: (dsl: string, style: string) => void;
@@ -130,6 +133,11 @@ const useSceneStore = create<Store>((set) => ({
 }));
 
 function DefaultRoom() {
+  const objects = useSceneStore((s) => s.objects);
+  const wallCutouts = objects.filter((o) => o.status === 'accepted' && isCutoutObject(o));
+  const wallThickness = 0.3;
+  const wallCutDepth = wallThickness * 4;
+
   return (
     <>
       <mesh receiveShadow rotation-x={-Math.PI / 2} position={[ROOM_WIDTH * UNIT_SCALE / 2, 0, ROOM_DEPTH * UNIT_SCALE / 2]}>
@@ -138,7 +146,25 @@ function DefaultRoom() {
       </mesh>
 
       <mesh receiveShadow position={[ROOM_WIDTH * UNIT_SCALE / 2, ROOM_HEIGHT * UNIT_SCALE / 2, 0]}>
-        <planeGeometry args={[ROOM_WIDTH * UNIT_SCALE, ROOM_HEIGHT * UNIT_SCALE]} />
+        <Geometry>
+          <Base>
+            <boxGeometry args={[ROOM_WIDTH * UNIT_SCALE, ROOM_HEIGHT * UNIT_SCALE, wallThickness]} />
+          </Base>
+          {wallCutouts.map((o) => {
+            const cutoutSize = [o.x.size * UNIT_SCALE, o.y.size * UNIT_SCALE, wallCutDepth] as const;
+            const cutoutCenter = [
+              (o.x.offset + o.x.size / 2) * UNIT_SCALE - ROOM_WIDTH * UNIT_SCALE / 2,
+              (o.y.offset + o.y.size / 2) * UNIT_SCALE - ROOM_HEIGHT * UNIT_SCALE / 2,
+              0,
+            ] as const;
+
+            return (
+              <Subtraction key={o.id} position={cutoutCenter}>
+                <boxGeometry args={cutoutSize} />
+              </Subtraction>
+            );
+          })}
+        </Geometry>
         <meshStandardMaterial color="#f2f2f0" roughness={0.9} />
       </mesh>
     </>
@@ -152,8 +178,7 @@ function DslObjects() {
   return (
     <>
       {acceptedObjects.map((o) => {
-        const isCutout = o.z.offset === 0 && o.z.size === 0;
-        if (isCutout) return null;
+        if (isCutoutObject(o)) return null;
 
         const size = [o.x.size * UNIT_SCALE, o.y.size * UNIT_SCALE, o.z.size * UNIT_SCALE] as const;
         const center = [
